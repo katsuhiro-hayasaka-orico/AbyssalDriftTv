@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ABYSSAL DRIFT — 深海</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@300;500;800&display=swap" rel="stylesheet">
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #010509;
+    cursor: none;
+    font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif;
+  }
+  canvas { display: block; }
+
+  /* ---- スタンバイ表示: 左に時計・右にカレンダー (焼き付き防止のためJSで微小シフト) ---- */
+  #hud {
+    --hud-gap: clamp(48px, 9vw, 180px);   /* 時計とカレンダーの間隔 */
+    position: fixed; inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--hud-gap);
+    padding: 0 4vw;
+    box-sizing: border-box;
+    pointer-events: none;
+    transition: opacity 1.2s ease;
+    z-index: 10;
+    font-family: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN',
+                 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+  }
+  /* 文字の可読性を支える中央の暗幕 (両端は生物のために明るく残す) */
+  #veil {
+    position: absolute; inset: -28px;
+    background:
+      radial-gradient(86% 105% at 50% 50%,
+        rgba(1, 6, 11, 0.52) 0%, rgba(1, 6, 11, 0.34) 48%, rgba(1, 6, 11, 0) 80%),
+      radial-gradient(150% 120% at 50% 50%,
+        rgba(0, 0, 0, 0) 72%, rgba(0, 0, 0, 0.28) 100%);
+  }
+
+  /* ---- 左: デジタル時計 (StandBy風の積み重ねレイアウト) ---- */
+  #clockPanel { position: relative; line-height: 0.84; }
+  .digits {
+    font-weight: 800;
+    font-size: min(31vh, 16.5vw);
+    letter-spacing: -0.015em;
+    font-variant-numeric: tabular-nums;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 30px rgba(80, 195, 240, 0.32));
+  }
+  #hours   { background-image: linear-gradient(180deg, #f2fcff 5%, #a8e2f5 95%); }
+  #minutes { background-image: linear-gradient(180deg, #86e7ff 0%, #2da5d6 100%); }
+  #dateLine {
+    margin-top: 3.4vh;
+    font-weight: 500;
+    font-size: clamp(16px, 3.3vh, 30px);
+    letter-spacing: 0.18em;
+    color: rgba(168, 215, 232, 0.78);
+    text-shadow: 0 0 18px rgba(60, 160, 210, 0.3);
+  }
+
+  /* ---- 右: 今月のカレンダーカード ---- */
+  #calPanel {
+    position: relative;
+    background: rgba(3, 14, 23, 0.46);
+    border: 1px solid rgba(120, 200, 230, 0.13);
+    border-radius: 28px;
+    padding: 3.6vh 2.4vw 3.2vh;
+    box-shadow: 0 12px 60px rgba(0, 0, 0, 0.35),
+                inset 0 0 50px rgba(40, 120, 160, 0.06);
+  }
+  #calHead {
+    display: flex;
+    align-items: baseline;
+    gap: 1.1em;
+    margin-bottom: 2.6vh;
+    padding-left: 0.3em;
+  }
+  #calMonth {
+    font-weight: 800;
+    font-size: clamp(28px, 6.2vh, 56px);
+    color: #d9f3fd;
+    text-shadow: 0 0 24px rgba(90, 200, 240, 0.35);
+  }
+  #calSub {
+    font-weight: 300;
+    font-size: clamp(11px, 1.9vh, 17px);
+    letter-spacing: 0.34em;
+    color: rgba(140, 190, 210, 0.5);
+  }
+  #calGrid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 1.0vh 0.55vw;
+  }
+  .dow {
+    text-align: center;
+    font-weight: 500;
+    font-size: clamp(11px, 1.9vh, 16px);
+    letter-spacing: 0.1em;
+    color: rgba(150, 195, 215, 0.5);
+    padding-bottom: 0.6vh;
+  }
+  .dow.sun { color: rgba(255, 150, 165, 0.6); }
+  .dow.sat { color: rgba(125, 200, 255, 0.6); }
+  .day {
+    width: clamp(30px, 5.6vh, 54px);
+    height: clamp(30px, 5.6vh, 54px);
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-weight: 500;
+    font-size: clamp(14px, 2.6vh, 24px);
+    font-variant-numeric: tabular-nums;
+    color: rgba(205, 232, 243, 0.85);
+  }
+  .day.sun { color: rgba(255, 160, 175, 0.8); }
+  .day.sat { color: rgba(130, 205, 255, 0.85); }
+  .day.out { opacity: 0.16; }
+  .day.today {
+    background: radial-gradient(circle at 35% 28%, #b3f2ff, #38b9e6 75%);
+    color: #03222f;
+    font-weight: 800;
+    box-shadow: 0 0 26px rgba(90, 210, 250, 0.55),
+                0 0 70px rgba(60, 180, 230, 0.28);
+  }
+
+  /* ---- 深度計 (環境演出・最小限) ---- */
+  #depth {
+    position: absolute;
+    bottom: 3.6%;
+    left: 50%;
+    transform: translateX(-50%);
+    font-weight: 300;
+    font-size: clamp(11px, 1.6vh, 15px);
+    letter-spacing: 0.5em;
+    text-indent: 0.5em;
+    color: rgba(130, 185, 205, 0.28);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* ---- 起動タイトル ---- */
+  #splash {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 18px;
+    pointer-events: none;
+    z-index: 20;
+    opacity: 1;
+    transition: opacity 3s ease;
+  }
+  #splash h1 {
+    margin: 0;
+    color: rgba(190, 230, 245, 0.9);
+    font-size: clamp(26px, 3vw, 50px);
+    font-weight: 100;
+    letter-spacing: 0.55em;
+    text-indent: 0.55em;
+    text-shadow: 0 0 40px rgba(90, 200, 235, 0.5);
+  }
+  #splash p {
+    margin: 0;
+    color: rgba(140, 190, 210, 0.5);
+    font-size: clamp(12px, 1vw, 16px);
+    font-weight: 300;
+    letter-spacing: 0.5em;
+    text-indent: 0.5em;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #splash { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div id="veil"></div>
+  <div id="clockPanel">
+    <div id="hours" class="digits">--</div>
+    <div id="minutes" class="digits">--</div>
+    <div id="dateLine">----</div>
+  </div>
+  <div id="calPanel">
+    <div id="calHead">
+      <div id="calMonth">--月</div>
+      <div id="calSub">---- ----</div>
+    </div>
+    <div id="calGrid"></div>
+  </div>
+  <div id="depth">深度 ---- m</div>
+</div>
+
+<div id="splash">
+  <h1>ABYSSAL DRIFT</h1>
+  <p>— 深海 2,800m —</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+/* =====================================================================
+   ABYSSAL DRIFT — 深海アンビエント (Android TV 常時表示向け)
+   - ポストプロセス不使用。発光はフレネル+加算合成スプライト/Pointsで表現し
+     TV級GPUでも60fps近辺を狙う設計
+   - 生物のアニメーションは可能な限り頂点シェーダー(GPU)側で実行
+   ===================================================================== */
+
+const FOG_COLOR = new THREE.Color(0x02101c);
+const FOG_DENSITY = 0.030;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = FOG_COLOR.clone().multiplyScalar(0.55);
+scene.fog = new THREE.FogExp2(FOG_COLOR.getHex(), FOG_DENSITY);
+
+const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 0, 0.001);
+
+/* ------------------------------------------------------------------
+   共通: 手書きフォグ (加算合成素材は黒へ減衰させ、霧色の浮きを防ぐ)
+------------------------------------------------------------------ */
+const FOG_PARS_V = `varying float vFogDepth;`;
+const FOG_V = `vFogDepth = -mvPosition.z;`;
+const FOG_PARS_F = `
+  varying float vFogDepth;
+  uniform vec3 uFogColor;
+  uniform float uFogDensity;
+  float fogFactor() {
+    float f = uFogDensity * vFogDepth;
+    return 1.0 - clamp(exp(-f * f), 0.0, 1.0);
+  }
+`;
+
+/* ------------------------------------------------------------------
+   ユーティリティ: ラジアルグラデーションのグローテクスチャ
+------------------------------------------------------------------ */
+function makeGlowTexture(inner = 'rgba(255,255,255,1)', mid = 'rgba(160,220,255,0.45)') {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0.0, inner);
+  grad.addColorStop(0.25, mid);
+  grad.addColorStop(1.0, 'rgba(0,0,0,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  return tex;
+}
+const glowTex = makeGlowTexture();
+const softTex = makeGlowTexture('rgba(220,235,245,0.9)', 'rgba(180,210,230,0.25)');
+
+const uTime = { value: 0 };
+
+/* ==================================================================
+   1. マリンスノー — 沈降する有機物の粒子 (GPUアニメーション)
+================================================================== */
+function createMarineSnow() {
+  const COUNT = 1400;
+  const pos = new Float32Array(COUNT * 3);
+  const seed = new Float32Array(COUNT);
+  const size = new Float32Array(COUNT);
+  for (let i = 0; i < COUNT; i++) {
+    pos[i * 3 + 0] = (Math.random() - 0.5) * 70;
+    pos[i * 3 + 1] = (Math.random() - 0.5) * 60;
+    pos[i * 3 + 2] = (Math.random() - 0.5) * 70;
+    seed[i] = Math.random();
+    size[i] = 0.4 + Math.random() * 1.4;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+  geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime, uMap: { value: softTex },
+      uFogColor: { value: FOG_COLOR }, uFogDensity: { value: FOG_DENSITY }
+    },
+    vertexShader: `
+      attribute float aSeed;
+      attribute float aSize;
+      uniform float uTime;
+      varying float vAlpha;
+      ${FOG_PARS_V}
+      void main() {
+        vec3 p = position;
+        float fall = uTime * (0.18 + aSeed * 0.35);
+        p.y = mod(p.y - fall + 30.0, 60.0) - 30.0;
+        p.x += sin(uTime * 0.12 + aSeed * 43.0) * (1.0 + aSeed);
+        p.z += cos(uTime * 0.09 + aSeed * 71.0) * (1.0 + aSeed);
+        vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+        ${FOG_V}
+        gl_PointSize = aSize * (90.0 / -mvPosition.z);
+        vAlpha = 0.35 + 0.3 * sin(uTime * 0.5 + aSeed * 20.0);
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D uMap;
+      varying float vAlpha;
+      ${FOG_PARS_F}
+      void main() {
+        vec4 tex = texture2D(uMap, gl_PointCoord);
+        float a = tex.a * vAlpha * (1.0 - fogFactor());
+        gl_FragColor = vec4(vec3(0.55, 0.68, 0.75) * tex.rgb, a);
+      }
+    `,
+    transparent: true, depthWrite: false
+  });
+  const points = new THREE.Points(geo, mat);
+  points.frustumCulled = false;
+  scene.add(points);
+}
+createMarineSnow();
+
+/* ==================================================================
+   2. 発光プランクトン — 瞬く微小発光体 (加算合成)
+================================================================== */
+function createPlankton() {
+  const COUNT = 260;
+  const pos = new Float32Array(COUNT * 3);
+  const seed = new Float32Array(COUNT);
+  for (let i = 0; i < COUNT; i++) {
+    pos[i * 3 + 0] = (Math.random() - 0.5) * 64;
+    pos[i * 3 + 1] = (Math.random() - 0.5) * 50;
+    pos[i * 3 + 2] = (Math.random() - 0.5) * 64;
+    seed[i] = Math.random();
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime, uMap: { value: glowTex },
+      uFogColor: { value: FOG_COLOR }, uFogDensity: { value: FOG_DENSITY }
+    },
+    vertexShader: `
+      attribute float aSeed;
+      uniform float uTime;
+      varying float vAlpha;
+      varying float vHue;
+      ${FOG_PARS_V}
+      void main() {
+        vec3 p = position;
+        p.x += sin(uTime * 0.2 + aSeed * 31.0) * 1.6;
+        p.y += sin(uTime * 0.16 + aSeed * 57.0) * 1.2;
+        p.z += cos(uTime * 0.18 + aSeed * 13.0) * 1.6;
+        vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+        ${FOG_V}
+        float tw = sin(uTime * (0.6 + aSeed * 1.8) + aSeed * 100.0);
+        vAlpha = pow(max(tw, 0.0), 6.0);
+        vHue = aSeed;
+        gl_PointSize = (1.4 + aSeed * 2.2) * (120.0 / -mvPosition.z);
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D uMap;
+      varying float vAlpha;
+      varying float vHue;
+      ${FOG_PARS_F}
+      void main() {
+        vec4 tex = texture2D(uMap, gl_PointCoord);
+        vec3 col = mix(vec3(0.35, 0.85, 1.0), vec3(0.55, 1.0, 0.85), step(0.7, vHue));
+        float fade = 1.0 - fogFactor();
+        gl_FragColor = vec4(col * tex.rgb * vAlpha * fade, tex.a * vAlpha * fade);
+      }
+    `,
+    transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const points = new THREE.Points(geo, mat);
+  points.frustumCulled = false;
+  scene.add(points);
+}
+createPlankton();
+
+/* ==================================================================
+   3. クラゲ — 拍動する傘 + なびく触手 (全てGPU頂点アニメーション)
+================================================================== */
+const jellies = [];
+
+function createJellyfish(opts) {
+  const { scale, hue1, hue2, speed, phase } = opts;
+  const group = new THREE.Group();
+
+  // --- 傘: Latheで生成した釣鐘形 ---
+  const profile = [];
+  const SEG = 22;
+  for (let i = 0; i <= SEG; i++) {
+    const t = i / SEG;
+    const ang = t * Math.PI * 0.62;
+    let r = Math.sin(ang);
+    r += Math.pow(t, 6.0) * 0.12;            // 縁のわずかな反り
+    const y = Math.cos(ang) * 0.82;
+    profile.push(new THREE.Vector2(r, y));
+  }
+  const bellGeo = new THREE.LatheGeometry(profile, 42);
+
+  const bellUniforms = {
+    uTime, uSpeed: { value: speed }, uPhase: { value: phase },
+    uColA: { value: new THREE.Color(hue1) },
+    uColB: { value: new THREE.Color(hue2) },
+    uDown: { value: new THREE.Vector3(0, -1, 0) },   // ワールド下方向(ローカル系)
+    uDrag: { value: new THREE.Vector3() },           // 遊泳による引きずり(ローカル系)
+    uFogColor: { value: FOG_COLOR }, uFogDensity: { value: FOG_DENSITY }
+  };
+  const bellMat = new THREE.ShaderMaterial({
+    uniforms: bellUniforms,
+    vertexShader: `
+      uniform float uTime;
+      uniform float uSpeed;
+      uniform float uPhase;
+      varying vec3 vNormal;
+      varying vec3 vView;
+      varying vec2 vUv;
+      ${FOG_PARS_V}
+      void main() {
+        vUv = uv;
+        vec3 p = position;
+        // 拍動: 縁ほど大きく収縮 (uv.y: 0=頂点, 1=縁)
+        float rim = uv.y;
+        float pulse = sin(uTime * uSpeed + uPhase);
+        float squeeze = 1.0 + pulse * 0.14 * smoothstep(0.15, 1.0, rim);
+        p.x *= squeeze;
+        p.z *= squeeze;
+        p.y *= 1.0 - pulse * 0.05 * rim;
+        // 縁の波打ち
+        float ang = atan(p.z, p.x);
+        p.y += sin(ang * 8.0 + uTime * 1.4 + uPhase) * 0.018 * rim;
+
+        vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+        ${FOG_V}
+        vNormal = normalize(normalMatrix * normal);
+        vView = normalize(-mvPosition.xyz);
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uColA;
+      uniform vec3 uColB;
+      uniform float uTime;
+      uniform float uPhase;
+      varying vec3 vNormal;
+      varying vec3 vView;
+      varying vec2 vUv;
+      ${FOG_PARS_F}
+      void main() {
+        float fres = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.2);
+        // 体内の発光むら
+        float organ = 0.5 + 0.5 * sin(vUv.x * 25.13 + uTime * 0.7 + uPhase);
+        vec3 col = mix(uColA, uColB, vUv.y) * (0.25 + organ * 0.12);
+        col += uColB * fres * 1.5;
+        float pulseGlow = 0.85 + 0.3 * sin(uTime * 0.9 + uPhase);
+        float a = (fres * 0.85 + 0.10) * pulseGlow;
+        float fade = 1.0 - fogFactor();
+        gl_FragColor = vec4(col * pulseGlow * fade, a * fade);
+      }
+    `,
+    transparent: true, depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending
+  });
+  group.add(new THREE.Mesh(bellGeo, bellMat));
+
+  // --- 縁触手: 1本ごとに長さ・周波数・カール・膨らみが異なる ---
+  const T_COUNT = 30;
+  const T_NODES = 26;
+  const segCount = T_COUNT * (T_NODES - 1) * 2;
+  const tPos = new Float32Array(segCount * 3);   // ダミー (実体はシェーダーで計算)
+  const tT = new Float32Array(segCount);
+  const tAng = new Float32Array(segCount);
+  const tLen = new Float32Array(segCount);
+  const tSeed = new Float32Array(segCount);
+  const tFreq = new Float32Array(segCount);
+  const tCurl = new Float32Array(segCount);
+  const tBil = new Float32Array(segCount);
+  let idx = 0;
+  for (let i = 0; i < T_COUNT; i++) {
+    const ang = (i / T_COUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.16;
+    const len = 1.2 + Math.pow(Math.random(), 1.5) * 4.4;   // 短い触手も混在
+    const sd = Math.random() * 20.0;
+    const fq = Math.random();
+    const cu = Math.random() < 0.6 ? 0.05 + Math.random() * 0.14 : 0.015;
+    const bl = (Math.random() - 0.35) * 0.55;                // 内巻き/外巻きの個体差
+    for (let j = 0; j < T_NODES - 1; j++) {
+      for (const jj of [j, j + 1]) {
+        tT[idx] = jj / (T_NODES - 1);
+        tAng[idx] = ang;
+        tLen[idx] = len;
+        tSeed[idx] = sd;
+        tFreq[idx] = fq;
+        tCurl[idx] = cu;
+        tBil[idx] = bl;
+        idx++;
+      }
+    }
+  }
+  const tGeo = new THREE.BufferGeometry();
+  tGeo.setAttribute('position', new THREE.BufferAttribute(tPos, 3));
+  tGeo.setAttribute('aT', new THREE.BufferAttribute(tT, 1));
+  tGeo.setAttribute('aAng', new THREE.BufferAttribute(tAng, 1));
+  tGeo.setAttribute('aLen', new THREE.BufferAttribute(tLen, 1));
+  tGeo.setAttribute('aSeed', new THREE.BufferAttribute(tSeed, 1));
+  tGeo.setAttribute('aFreq', new THREE.BufferAttribute(tFreq, 1));
+  tGeo.setAttribute('aCurl', new THREE.BufferAttribute(tCurl, 1));
+  tGeo.setAttribute('aBil', new THREE.BufferAttribute(tBil, 1));
+
+  // 非正弦的な有機ノイズ (非整数倍の周波数を重ねる)
+  const ORGANIC_NOISE = `
+    float n1(float x) {
+      return sin(x) * 0.55 + sin(x * 2.17 + 1.3) * 0.28 + sin(x * 4.79 + 2.7) * 0.17;
+    }
+  `;
+
+  const tentMat = new THREE.ShaderMaterial({
+    uniforms: bellUniforms,
+    vertexShader: `
+      attribute float aT;
+      attribute float aAng;
+      attribute float aLen;
+      attribute float aSeed;
+      attribute float aFreq;
+      attribute float aCurl;
+      attribute float aBil;
+      uniform float uTime;
+      uniform float uSpeed;
+      uniform float uPhase;
+      uniform vec3 uDown;
+      uniform vec3 uDrag;
+      varying float vT;
+      varying float vSeed;
+      ${FOG_PARS_V}
+      ${ORGANIC_NOISE}
+      void main() {
+        vT = aT;
+        vSeed = aSeed;
+        // 拍動と同期した付け根の動き
+        float pulse = sin(uTime * uSpeed + uPhase);
+        float rimR = 0.92 * (1.0 + pulse * 0.12);
+        vec3 base = vec3(cos(aAng) * rimR, -0.22, sin(aAng) * rimR);
+
+        // 重力追従: 傘が傾いても先端ほどワールド下方向へ垂れる
+        vec3 dir = normalize(mix(vec3(0.0, -1.0, 0.0), uDown, smoothstep(0.0, 0.7, aT)));
+        vec3 p = base + dir * (aT * aLen);
+
+        // 中腹の膨らみ (内巻き / 外巻き)
+        vec2 radial = normalize(base.xz);
+        p.xz += radial * sin(aT * 3.14159) * aBil;
+
+        // 多オクターブの水流うねり (触手ごとに周波数が異なる)
+        float w = aT * aT;
+        float s = uTime * (0.45 + aFreq * 0.5) + aSeed;
+        p.x += n1(s + aT * (2.5 + aFreq * 4.0)) * 0.34 * w;
+        p.z += n1(s * 0.83 + aT * (2.0 + aFreq * 3.2) + 4.0) * 0.34 * w;
+        p.y += n1(s * 0.6 + aT * 2.0) * 0.12 * w;
+
+        // 拍動の収縮が先端へ伝播
+        p.y += sin(uTime * uSpeed + uPhase - aT * 4.5) * 0.10 * w;
+
+        // 遊泳による引きずり (慣性)
+        p += uDrag * w;
+
+        // 先端の螺旋カール
+        float cz = smoothstep(0.5, 1.0, aT);
+        float ca = aCurl * cz;
+        float cw = aT * (16.0 + aFreq * 14.0) + aSeed * 7.0 + uTime * 0.35;
+        p += vec3(cos(cw), sin(cw * 0.53) * 0.6, sin(cw)) * ca;
+
+        vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+        ${FOG_V}
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uColB;
+      varying float vT;
+      varying float vSeed;
+      ${FOG_PARS_F}
+      void main() {
+        float bright = 0.55 + 0.45 * fract(vSeed * 0.731);   // 触手ごとの明度差
+        float a = ((1.0 - vT) * 0.5 + 0.04) * bright;
+        float fade = 1.0 - fogFactor();
+        gl_FragColor = vec4(uColB * (0.5 + (1.0 - vT) * 0.9) * bright * fade, a * fade);
+      }
+    `,
+    transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const tentacles = new THREE.LineSegments(tGeo, tentMat);
+  tentacles.frustumCulled = false;
+  group.add(tentacles);
+
+  // --- 口腕: 中央から垂れるフリル状のリボン4本 ---
+  const A_COUNT = 4;
+  const A_NODES = 26;
+  const aVertCount = A_COUNT * A_NODES * 2;
+  const aPosArr = new Float32Array(aVertCount * 3);
+  const aTArr = new Float32Array(aVertCount);
+  const aSArr = new Float32Array(aVertCount);
+  const aArmArr = new Float32Array(aVertCount);
+  const aSdArr = new Float32Array(aVertCount);
+  const aIdxArr = [];
+  let vi = 0;
+  for (let a = 0; a < A_COUNT; a++) {
+    const armAng = (a / A_COUNT) * Math.PI * 2 + 0.6;
+    const sd = Math.random() * 20.0;
+    for (let j = 0; j < A_NODES; j++) {
+      for (const sgn of [-1, 1]) {
+        aTArr[vi] = j / (A_NODES - 1);
+        aSArr[vi] = sgn;
+        aArmArr[vi] = armAng;
+        aSdArr[vi] = sd;
+        vi++;
+      }
+      if (j > 0) {
+        const b = vi - 4;
+        aIdxArr.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+      }
+    }
+  }
+  const armGeo = new THREE.BufferGeometry();
+  armGeo.setAttribute('position', new THREE.BufferAttribute(aPosArr, 3));
+  armGeo.setAttribute('aT', new THREE.BufferAttribute(aTArr, 1));
+  armGeo.setAttribute('aS', new THREE.BufferAttribute(aSArr, 1));
+  armGeo.setAttribute('aArm', new THREE.BufferAttribute(aArmArr, 1));
+  armGeo.setAttribute('aSeed', new THREE.BufferAttribute(aSdArr, 1));
+  armGeo.setIndex(aIdxArr);
+
+  const armMat = new THREE.ShaderMaterial({
+    uniforms: bellUniforms,
+    vertexShader: `
+      attribute float aT;
+      attribute float aS;
+      attribute float aArm;
+      attribute float aSeed;
+      uniform float uTime;
+      uniform float uSpeed;
+      uniform float uPhase;
+      uniform vec3 uDown;
+      uniform vec3 uDrag;
+      varying float vT;
+      varying float vS;
+      ${FOG_PARS_V}
+      ${ORGANIC_NOISE}
+      void main() {
+        vT = aT;
+        vS = aS;
+        vec3 base = vec3(cos(aArm) * 0.20, -0.16, sin(aArm) * 0.20);
+        float armLen = 2.1;
+        vec3 dir = normalize(mix(vec3(0.0, -1.0, 0.0), uDown, smoothstep(0.0, 0.8, aT)));
+        vec3 p = base + dir * aT * armLen;
+
+        // 大きくゆったりしたS字のうねり
+        float w = aT * aT;
+        float s = uTime * 0.5 + aSeed;
+        vec2 radial = vec2(cos(aArm), sin(aArm));
+        p.xz += radial * n1(s + aT * 2.6) * 0.30 * w;
+        p.x += n1(s * 0.7 + aT * 2.0 + 3.0) * 0.22 * w;
+        p.z += n1(s * 0.9 + aT * 1.7 + 7.0) * 0.22 * w;
+        p += uDrag * w * 0.8;
+
+        // 幅は先細り + フリルの波で律動
+        float width = 0.17 * (1.0 - aT * 0.72)
+                    * (1.0 + 0.45 * sin(aT * 16.0 - uTime * 1.6 + aSeed));
+        vec3 across = vec3(-sin(aArm), 0.0, cos(aArm));
+        p += across * (aS * width);
+
+        // フリル縁の細かな立体波打ち
+        p.xz += radial * sin(aT * 24.0 + uTime * 2.0 + aS * 1.5 + aSeed) * 0.035 * (0.3 + w);
+        p.y += sin(aT * 20.0 - uTime * 1.8 + aS * 2.0) * 0.02;
+
+        vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+        ${FOG_V}
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uColA;
+      uniform vec3 uColB;
+      varying float vT;
+      varying float vS;
+      ${FOG_PARS_F}
+      void main() {
+        float edge = pow(abs(vS), 2.5);                 // フリルの縁ほど明るい
+        vec3 col = mix(uColA * 1.7, uColB, 0.30 + edge * 0.6);
+        float a = (0.10 + edge * 0.50) * (1.0 - vT * 0.8);
+        float fade = 1.0 - fogFactor();
+        gl_FragColor = vec4(col * fade, a * fade);
+      }
+    `,
+    transparent: true, depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending
+  });
+  const arms = new THREE.Mesh(armGeo, armMat);
+  arms.frustumCulled = false;
+  group.add(arms);
+
+  // --- 中心の発光核 ---
+  const core = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: new THREE.Color(hue2),
+    transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, opacity: 0.5
+  }));
+  core.position.y = 0.25;
+  core.scale.setScalar(1.6);
+  group.add(core);
+
+  group.scale.setScalar(scale);
+  scene.add(group);
+  return { group, core, speed, phase, uniforms: bellUniforms,
+    prevPos: null,
+    drift: {
+    cx: (Math.random() - 0.5) * 36,
+    cy: (Math.random() - 0.5) * 18,
+    cz: (Math.random() - 0.5) * 36,
+    r: 3 + Math.random() * 5,
+    w: 0.018 + Math.random() * 0.02,
+    o: Math.random() * Math.PI * 2,
+    rise: 0.12 + Math.random() * 0.1
+  }};
+}
+
+const JELLY_PRESETS = [
+  { scale: 1.5, hue1: 0x103a55, hue2: 0x55d8ff, speed: 0.85, phase: 0.0 },
+  { scale: 1.1, hue1: 0x2a1545, hue2: 0xc97bff, speed: 1.05, phase: 2.1 },
+  { scale: 2.1, hue1: 0x0d3047, hue2: 0x3fc8e8, speed: 0.62, phase: 4.0 },
+  { scale: 0.8, hue1: 0x401530, hue2: 0xff7bb0, speed: 1.3,  phase: 1.2 },
+  { scale: 1.3, hue1: 0x10304a, hue2: 0x7be8ff, speed: 0.9,  phase: 5.3 },
+  { scale: 0.65,hue1: 0x251f4d, hue2: 0x9b8cff, speed: 1.45, phase: 3.3 },
+  { scale: 1.8, hue1: 0x0a2c3d, hue2: 0x4ddfd2, speed: 0.7,  phase: 0.8 },
+];
+JELLY_PRESETS.forEach(p => jellies.push(createJellyfish(p)));
+
+/* ==================================================================
+   4. クダクラゲ (シフォノフォア) — 発光ビーズの鎖
+================================================================== */
+const sipho = (() => {
+  const BEADS = 42;
+  const positions = new Float32Array(BEADS * 3);
+  const indexAttr = new Float32Array(BEADS);
+  for (let i = 0; i < BEADS; i++) indexAttr[i] = i;
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('aIndex', new THREE.BufferAttribute(indexAttr, 1));
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime, uMap: { value: glowTex },
+      uFogColor: { value: FOG_COLOR }, uFogDensity: { value: FOG_DENSITY }
+    },
+    vertexShader: `
+      attribute float aIndex;
+      uniform float uTime;
+      varying float vGlow;
+      ${FOG_PARS_V}
+      void main() {
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        ${FOG_V}
+        // 発光が鎖を伝播する
+        vGlow = 0.45 + 0.55 * pow(0.5 + 0.5 * sin(uTime * 2.2 - aIndex * 0.55), 3.0);
+        float headBoost = aIndex < 3.0 ? 1.6 : 1.0;
+        gl_PointSize = (2.2 + vGlow * 2.4) * headBoost * (130.0 / -mvPosition.z);
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D uMap;
+      varying float vGlow;
+      ${FOG_PARS_F}
+      void main() {
+        vec4 tex = texture2D(uMap, gl_PointCoord);
+        vec3 col = mix(vec3(0.45, 0.75, 1.0), vec3(0.85, 0.95, 1.0), vGlow);
+        float fade = 1.0 - fogFactor();
+        gl_FragColor = vec4(col * tex.rgb * vGlow * fade, tex.a * vGlow * fade);
+      }
+    `,
+    transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const points = new THREE.Points(geo, mat);
+  points.frustumCulled = false;
+  scene.add(points);
+
+  // 体節を結ぶ微かなライン
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(BEADS * 3), 3));
+  const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({
+    color: 0x9fdcff, transparent: true, opacity: 0.16,
+    blending: THREE.AdditiveBlending, depthWrite: false
+  }));
+  line.frustumCulled = false;
+  scene.add(line);
+
+  function path(s) {
+    return new THREE.Vector3(
+      Math.sin(s * 0.050) * 17 + Math.sin(s * 0.013) * 6,
+      Math.sin(s * 0.071 + 2.0) * 6 - 2,
+      Math.cos(s * 0.043) * 17 + Math.cos(s * 0.017) * 6
+    );
+  }
+
+  return {
+    update(t) {
+      const posAttr = geo.attributes.position;
+      const linAttr = lineGeo.attributes.position;
+      for (let i = 0; i < BEADS; i++) {
+        const s = t - i * 0.55;            // 各体節は同じ経路を遅延追従
+        const p = path(s);
+        // 進行方向と直交する蛇行
+        p.y += Math.sin(t * 1.3 - i * 0.4) * 0.35;
+        p.x += Math.sin(t * 0.9 - i * 0.5) * 0.22;
+        posAttr.setXYZ(i, p.x, p.y, p.z);
+        linAttr.setXYZ(i, p.x, p.y, p.z);
+      }
+      posAttr.needsUpdate = true;
+      linAttr.needsUpdate = true;
+    }
+  };
+})();
+
+/* ==================================================================
+   5. 魚群 — InstancedMesh + 頂点シェーダー尾びれ
+================================================================== */
+const school = (() => {
+  const COUNT = 84;
+
+  // 細身の魚体ジオメトリ (手作りローポリ)
+  const v = [
+    [ 1.2,  0.00,  0.00],  // 0 鼻先
+    [ 0.0,  0.30,  0.00],  // 1 背
+    [ 0.0, -0.24,  0.00],  // 2 腹
+    [ 0.0,  0.00,  0.14],  // 3 右側面
+    [ 0.0,  0.00, -0.14],  // 4 左側面
+    [-1.0,  0.00,  0.00],  // 5 尾柄
+    [-1.55, 0.34,  0.00],  // 6 尾びれ上
+    [-1.55,-0.34,  0.00],  // 7 尾びれ下
+  ];
+  const f = [
+    [0,1,3],[0,3,2],[0,2,4],[0,4,1],
+    [5,3,1],[5,2,3],[5,4,2],[5,1,4],
+    [5,6,7]
+  ];
+  const positions = [];
+  for (const tri of f) for (const vi of tri) positions.push(...v[vi]);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+  geo.computeVertexNormals();
+
+  const phase = new Float32Array(COUNT);
+  for (let i = 0; i < COUNT; i++) phase[i] = Math.random() * Math.PI * 2;
+  geo.setAttribute('aPhase', new THREE.InstancedBufferAttribute(phase, 1));
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime,
+      uFogColor: { value: FOG_COLOR }, uFogDensity: { value: FOG_DENSITY }
+    },
+    vertexShader: `
+      attribute float aPhase;
+      uniform float uTime;
+      varying vec3 vNormal;
+      varying vec3 vView;
+      varying float vSide;
+      ${FOG_PARS_V}
+      void main() {
+        vec3 p = position;
+        // 尾側ほど大きく左右に振る
+        float tailW = smoothstep(0.4, -1.6, p.x);
+        p.z += sin(uTime * 7.0 + aPhase + p.x * 2.4) * 0.22 * tailW;
+        vec4 worldP = instanceMatrix * vec4(p, 1.0);
+        vec4 mvPosition = viewMatrix * worldP;
+        ${FOG_V}
+        vNormal = normalize((viewMatrix * instanceMatrix * vec4(normal, 0.0)).xyz);
+        vView = normalize(-mvPosition.xyz);
+        vSide = p.y;
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vNormal;
+      varying vec3 vView;
+      varying float vSide;
+      ${FOG_PARS_F}
+      void main() {
+        vec3 n = normalize(vNormal);
+        float diff = max(dot(n, normalize(vec3(0.2, 1.0, 0.3))), 0.0);
+        float fres = pow(1.0 - abs(dot(n, normalize(vView))), 3.0);
+        vec3 body = mix(vec3(0.05, 0.09, 0.13), vec3(0.16, 0.24, 0.30), diff);
+        body = mix(body, vec3(0.10, 0.13, 0.15), smoothstep(0.0, -0.2, vSide)); // 腹側
+        vec3 col = body + vec3(0.35, 0.65, 0.8) * fres * 0.7;  // 鱗の銀色反射
+        col = mix(col, uFogColor, fogFactor());
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `
+  });
+
+  const mesh = new THREE.InstancedMesh(geo, mat, COUNT);
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+
+  // 各個体: 群れの中心まわりの緩い軌道
+  const fish = [];
+  for (let i = 0; i < COUNT; i++) {
+    fish.push({
+      r: 2.2 + Math.random() * 5.5,
+      h: (Math.random() - 0.5) * 3.2,
+      w: 0.35 + Math.random() * 0.3,
+      o: Math.random() * Math.PI * 2,
+      wob: Math.random() * Math.PI * 2,
+      sc: 0.30 + Math.random() * 0.22
+    });
+  }
+  const dummy = new THREE.Object3D();
+  const prev = new Array(COUNT).fill(null);
+
+  return {
+    update(t) {
+      // 群れ全体の中心がゆっくり回遊
+      const cx = Math.sin(t * 0.031) * 14;
+      const cy = Math.sin(t * 0.023 + 1.0) * 5 + 2;
+      const cz = Math.cos(t * 0.027) * 14 - 4;
+      for (let i = 0; i < COUNT; i++) {
+        const fsh = fish[i];
+        const a = t * fsh.w + fsh.o;
+        const x = cx + Math.cos(a) * fsh.r + Math.sin(t * 0.7 + fsh.wob) * 0.4;
+        const y = cy + fsh.h + Math.sin(t * 0.5 + fsh.wob * 2.0) * 0.5;
+        const z = cz + Math.sin(a) * fsh.r + Math.cos(t * 0.6 + fsh.wob) * 0.4;
+        dummy.position.set(x, y, z);
+        const p = prev[i];
+        if (p) dummy.lookAt(2 * x - p.x, 2 * y - p.y, 2 * z - p.z);
+        dummy.rotateY(-Math.PI / 2);  // モデルの+Xを進行方向へ
+        dummy.scale.setScalar(fsh.sc);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+        prev[i] = { x, y, z };
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+  };
+})();
+
+/* ==================================================================
+   6. 巨大シルエット — 霧の彼方を横切る回遊イベント
+================================================================== */
+const leviathan = (() => {
+  const group = new THREE.Group();
+
+  // 紡錘形の巨体
+  const prof = [];
+  const N = 16;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const r = Math.sin(t * Math.PI) * Math.pow(1.0 - t * 0.35, 1.2) * 3.2;
+    prof.push(new THREE.Vector2(Math.max(r, 0.001), (t - 0.5) * 24));
+  }
+  const bodyGeo = new THREE.LatheGeometry(prof, 20);
+  const bodyMat = new THREE.MeshBasicMaterial({ color: 0x03131f, fog: true });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.rotation.z = Math.PI / 2;
+  group.add(body);
+
+  // 側面の発光器列
+  const PHO = 22;
+  const pp = new Float32Array(PHO * 3);
+  for (let i = 0; i < PHO; i++) {
+    const t = i / (PHO - 1);
+    pp[i * 3 + 0] = (t - 0.5) * 21;
+    pp[i * 3 + 1] = -0.6 + Math.sin(t * Math.PI) * 0.3;
+    pp[i * 3 + 2] = Math.sin(t * Math.PI) * 2.9;
+  }
+  const phoGeo = new THREE.BufferGeometry();
+  phoGeo.setAttribute('position', new THREE.BufferAttribute(pp, 3));
+  const pho = new THREE.Points(phoGeo, new THREE.PointsMaterial({
+    map: glowTex, color: 0x6fd8ff, size: 1.1,
+    transparent: true, opacity: 0.6, depthWrite: false,
+    blending: THREE.AdditiveBlending, sizeAttenuation: true
+  }));
+  group.add(pho);
+
+  group.visible = false;
+  scene.add(group);
+
+  let active = false;
+  let startT = 0;
+  let nextAt = 45 + Math.random() * 40;   // 初回は45〜85秒後
+  const DUR = 90;
+
+  return {
+    update(t) {
+      if (!active && t > nextAt) {
+        active = true;
+        startT = t;
+        group.visible = true;
+        group.userData.dir = Math.random() < 0.5 ? 1 : -1;
+        group.userData.y = -8 + Math.random() * 10;
+        group.userData.z = -52 - Math.random() * 14;
+      }
+      if (active) {
+        const u = (t - startT) / DUR;
+        if (u >= 1) {
+          active = false;
+          group.visible = false;
+          nextAt = t + 120 + Math.random() * 140;  // 2〜4分間隔
+          return;
+        }
+        const dir = group.userData.dir;
+        group.position.set(
+          dir * (-90 + u * 180),
+          group.userData.y + Math.sin(t * 0.18) * 1.6,
+          group.userData.z
+        );
+        group.rotation.y = dir > 0 ? 0 : Math.PI;
+        group.rotation.z = Math.sin(t * 0.4) * 0.025;  // 緩やかな身じろぎ
+      }
+    }
+  };
+})();
+
+/* ==================================================================
+   7. 微かな光芒 — 遥か上方から届く残光
+================================================================== */
+function createLightShafts() {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uTime, uFogColor: { value: FOG_COLOR }, uFogDensity: { value: FOG_DENSITY } },
+    vertexShader: `
+      varying vec2 vUv;
+      ${FOG_PARS_V}
+      void main() {
+        vUv = uv;
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        ${FOG_V}
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      varying vec2 vUv;
+      ${FOG_PARS_F}
+      void main() {
+        float x = abs(vUv.x - 0.5) * 2.0;
+        float core = pow(1.0 - x, 3.0);
+        float vert = pow(vUv.y, 2.2);
+        float flicker = 0.7 + 0.3 * sin(uTime * 0.21 + vUv.x * 6.0);
+        float a = core * vert * 0.045 * flicker * (1.0 - fogFactor());
+        gl_FragColor = vec4(vec3(0.45, 0.75, 0.95) * a, a);
+      }
+    `,
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending
+  });
+  const shafts = [];
+  for (let i = 0; i < 4; i++) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(8 + i * 4, 55), mat);
+    m.position.set((Math.random() - 0.5) * 50, 22, (Math.random() - 0.5) * 50);
+    m.rotation.y = Math.random() * Math.PI;
+    m.rotation.z = (Math.random() - 0.5) * 0.18;
+    scene.add(m);
+    shafts.push(m);
+  }
+  return shafts;
+}
+const shafts = createLightShafts();
+
+/* ==================================================================
+   HUD: 時計・深度計 (焼き付き防止シフト付き)
+================================================================== */
+const hud = document.getElementById('hud');
+const hoursEl = document.getElementById('hours');
+const minutesEl = document.getElementById('minutes');
+const dateLineEl = document.getElementById('dateLine');
+const calMonthEl = document.getElementById('calMonth');
+const calSubEl = document.getElementById('calSub');
+const calGridEl = document.getElementById('calGrid');
+const depthEl = document.getElementById('depth');
+const WEEK = ['日', '月', '火', '水', '木', '金', '土'];
+const EN_MONTH = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE',
+                  'JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
+let baseDepth = 2800;
+let hudVisible = true;
+let calKey = '';
+
+// --- 今月のカレンダーを描画 (日曜始まり・前後月は淡く) ---
+function renderCalendar(d) {
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  const today = d.getDate();
+  calMonthEl.textContent = `${m + 1}月`;
+  calSubEl.textContent = `${EN_MONTH[m]} ${y}`;
+
+  let html = '';
+  for (let i = 0; i < 7; i++) {
+    const cls = i === 0 ? ' sun' : i === 6 ? ' sat' : '';
+    html += `<div class="dow${cls}">${WEEK[i]}</div>`;
+  }
+  const startDow = new Date(y, m, 1).getDay();
+  const daysIn = new Date(y, m + 1, 0).getDate();
+  const prevDays = new Date(y, m, 0).getDate();
+  const cells = Math.ceil((startDow + daysIn) / 7) * 7;
+  for (let c = 0; c < cells; c++) {
+    const n = c - startDow + 1;
+    const dow = c % 7;
+    let cls = 'day' + (dow === 0 ? ' sun' : dow === 6 ? ' sat' : '');
+    let label;
+    if (n < 1)            { label = prevDays + n; cls += ' out'; }
+    else if (n > daysIn)  { label = n - daysIn;   cls += ' out'; }
+    else                  { label = n; if (n === today) cls += ' today'; }
+    html += `<div class="${cls}">${label}</div>`;
+  }
+  calGridEl.innerHTML = html;
+}
+
+// --- 時計 (分が変わる時だけDOM更新 / 日付が変わればカレンダー再描画) ---
+function updateClock() {
+  const d = new Date();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  if (hoursEl.textContent !== hh) hoursEl.textContent = hh;
+  if (minutesEl.textContent !== mm) minutesEl.textContent = mm;
+  const dateStr = `${d.getMonth() + 1}月${d.getDate()}日 ${WEEK[d.getDay()]}曜日`;
+  if (dateLineEl.textContent !== dateStr) dateLineEl.textContent = dateStr;
+  const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  if (key !== calKey) { calKey = key; renderCalendar(d); }
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// 深度はゆらゆらと漂流
+setInterval(() => {
+  baseDepth += (Math.random() - 0.48) * 2.4;
+  baseDepth = Math.max(2400, Math.min(3400, baseDepth));
+  depthEl.textContent =
+    `深度 ${Math.round(baseDepth).toLocaleString('ja-JP')} m`;
+}, 3000);
+
+// 焼き付き防止: 60秒ごとにHUD全体を数px移動
+setInterval(() => {
+  const dx = Math.round((Math.random() - 0.5) * 16);
+  const dy = Math.round((Math.random() - 0.5) * 16);
+  hud.style.transform = `translate(${dx}px, ${dy}px)`;
+}, 60000);
+
+// リモコンの決定/任意キーでHUD切替
+function toggleHUD() {
+  hudVisible = !hudVisible;
+  hud.style.opacity = hudVisible ? '1' : '0';
+}
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ' || e.key === 'h') toggleHUD();
+});
+window.addEventListener('click', toggleHUD);
+
+// 起動タイトルのフェードアウト
+setTimeout(() => {
+  const s = document.getElementById('splash');
+  s.style.opacity = '0';
+  setTimeout(() => s.remove(), 3200);
+}, 3500);
+
+/* ==================================================================
+   メインループ
+================================================================== */
+const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const clock = new THREE.Clock();
+const _vel = new THREE.Vector3();
+const _qInv = new THREE.Quaternion();
+let t = Math.random() * 100;
+
+function animate() {
+  if (document.hidden) return;          // 非表示時は描画停止 (省電力)
+  const dt = Math.min(clock.getDelta(), 0.1);
+  t += dt * (REDUCED ? 0.35 : 1.0);
+  uTime.value = t;
+
+  // --- カメラ: 潜水艇の覗き窓のような緩慢な視線移動 ---
+  camera.position.set(
+    Math.sin(t * 0.021) * 0.9,
+    Math.sin(t * 0.017 + 1.3) * 0.7,
+    Math.cos(t * 0.015) * 0.9
+  );
+  const lx = Math.sin(t * 0.012) * 9;
+  const ly = Math.sin(t * 0.0145 + 2.0) * 4;
+  const lz = -14 + Math.cos(t * 0.010) * 5;
+  camera.lookAt(lx, ly, lz);
+  camera.rotation.z += Math.sin(t * 0.019) * 0.012;  // 微かなロール
+
+  // --- クラゲ: 拍動に同期した推進 + 緩い周回ドリフト ---
+  for (const j of jellies) {
+    const d = j.drift;
+    const a = t * d.w + d.o;
+    const thrust = Math.max(Math.sin(t * j.speed + j.phase), 0.0);
+    j.group.position.set(
+      d.cx + Math.cos(a) * d.r,
+      d.cy + Math.sin(t * 0.05 + d.o) * 4,
+      d.cz + Math.sin(a) * d.r
+    );
+    j.group.position.y += Math.sin(t * j.speed + j.phase - 1.2) * 0.25;
+    j.group.rotation.y = a * 0.4;
+    j.group.rotation.x = Math.sin(t * 0.1 + d.o) * 0.22;
+    j.group.rotation.z = Math.cos(t * 0.08 + d.o) * 0.18;
+    j.core.material.opacity = 0.3 + thrust * 0.35;
+
+    // 触手・口腕の物理: 遊泳速度を慣性ドラッグとしてローカル系へ
+    j.group.updateMatrixWorld();
+    _qInv.copy(j.group.quaternion).invert();
+    if (j.prevPos && dt > 0.0001) {
+      _vel.copy(j.group.position).sub(j.prevPos).divideScalar(dt);
+      _vel.applyQuaternion(_qInv).divideScalar(j.group.scale.x);
+      _vel.multiplyScalar(-0.55);
+      if (_vel.length() > 0.9) _vel.setLength(0.9);
+      j.uniforms.uDrag.value.lerp(_vel, 0.06);   // 滑らかに追従 = 水の粘性
+    } else {
+      j.prevPos = new THREE.Vector3();
+    }
+    j.prevPos.copy(j.group.position);
+    j.uniforms.uDown.value.set(0, -1, 0).applyQuaternion(_qInv);
+  }
+
+  sipho.update(t);
+  school.update(t);
+  leviathan.update(t);
+
+  for (let i = 0; i < shafts.length; i++) {
+    shafts[i].rotation.z = Math.sin(t * 0.05 + i * 1.7) * 0.1;
+  }
+
+  renderer.render(scene, camera);
+}
+renderer.setAnimationLoop(animate);
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) clock.getDelta();   // 復帰時のジャンプ防止
+});
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
