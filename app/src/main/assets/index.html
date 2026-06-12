@@ -4,10 +4,28 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ABYSSAL DRIFT — 深海</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@300;500;800&display=swap" rel="stylesheet">
 <style>
+  @font-face {
+    font-family: 'AbyssalReadableDigits';
+    src: url('fonts/readable.woff2') format('woff2');
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'AbyssalSoftDigits';
+    src: url('fonts/soft.woff2') format('woff2');
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'AbyssalHandwrittenDigits';
+    src: url('fonts/handwritten.woff2') format('woff2');
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'AbyssalDesignDigits';
+    src: url('fonts/design.woff2') format('woff2');
+    font-display: swap;
+  }
+
   html, body {
     margin: 0; padding: 0;
     width: 100%; height: 100%;
@@ -31,8 +49,8 @@
     pointer-events: none;
     transition: opacity 1.2s ease;
     z-index: 10;
-    font-family: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN',
-                 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+    font-family: 'Hiragino Maru Gothic ProN', 'Hiragino Kaku Gothic ProN',
+                 'Noto Sans JP', 'Yu Gothic', sans-serif;
   }
   /* 文字の可読性を支える中央の暗幕 (両端は生物のために明るく残す) */
   #veil {
@@ -45,7 +63,24 @@
   }
 
   /* ---- 左: デジタル時計 (StandBy風の積み重ねレイアウト) ---- */
-  #clockPanel { position: relative; line-height: 0.84; }
+  #clockPanel {
+    position: relative;
+    line-height: 0.84;
+    font-family: var(--digit-font-family);
+  }
+  :root,
+  [data-font-preset="readable"] {
+    --digit-font-family: 'AbyssalReadableDigits', 'Hiragino Maru Gothic ProN', 'Noto Sans JP', system-ui, sans-serif;
+  }
+  [data-font-preset="soft"] {
+    --digit-font-family: 'AbyssalSoftDigits', 'Hiragino Maru Gothic ProN', 'Yu Gothic', system-ui, sans-serif;
+  }
+  [data-font-preset="handwritten"] {
+    --digit-font-family: 'AbyssalHandwrittenDigits', 'Comic Sans MS', 'Hiragino Maru Gothic ProN', cursive, sans-serif;
+  }
+  [data-font-preset="design"] {
+    --digit-font-family: 'AbyssalDesignDigits', Impact, 'Arial Black', system-ui, sans-serif;
+  }
   .digits {
     font-weight: 800;
     font-size: min(31vh, 16.5vw);
@@ -178,12 +213,59 @@
     letter-spacing: 0.5em;
     text-indent: 0.5em;
   }
+
+
+  /* ---- 移植機能: 控えめな深海Toast / Innovation Lab刻印 ---- */
+  #abyssalToast {
+    position: fixed;
+    left: 50%;
+    bottom: clamp(74px, 9vh, 118px);
+    transform: translateX(-50%) translateY(10px);
+    z-index: 40;
+    padding: 10px 18px;
+    border: 1px solid rgba(120, 210, 245, 0.22);
+    border-radius: 999px;
+    background: rgba(2, 12, 22, 0.56);
+    color: rgba(210, 242, 255, 0.78);
+    font-size: clamp(12px, 1.2vw, 18px);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    pointer-events: none;
+    user-select: none;
+    opacity: 0;
+    text-shadow: 0 0 18px rgba(100, 220, 255, 0.32);
+    box-shadow: 0 0 34px rgba(40, 150, 210, 0.12), inset 0 0 18px rgba(70, 180, 220, 0.05);
+    transition: opacity 320ms ease, transform 320ms ease;
+  }
+  #abyssalToast.is-visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  .innovation-credit {
+    position: fixed;
+    right: clamp(24px, 3vw, 42px);
+    bottom: clamp(22px, 3vh, 36px);
+    z-index: 30;
+    padding: 7px 12px;
+    border: 1px solid rgba(150, 220, 255, 0.18);
+    border-radius: 999px;
+    background: rgba(2, 10, 18, 0.24);
+    color: rgba(210, 240, 255, 0.58);
+    font-size: clamp(10px, 0.8vw, 14px);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    line-height: 1;
+    pointer-events: none;
+    user-select: none;
+    text-shadow: 0 0 12px rgba(110, 210, 255, 0.24);
+    box-shadow: 0 0 24px rgba(40, 140, 190, 0.08);
+  }
   @media (prefers-reduced-motion: reduce) {
-    #splash { transition: none; }
+    #splash, #abyssalToast { transition: none; }
   }
 </style>
 </head>
-<body>
+<body data-font-preset="readable">
 
 <div id="hud">
   <div id="veil"></div>
@@ -202,14 +284,36 @@
   <div id="depth">深度 ---- m</div>
 </div>
 
+<div id="abyssalToast" role="status" aria-live="polite"></div>
+<div class="innovation-credit" aria-hidden="true">Created by Innovation Lab</div>
+
 <div id="splash">
   <h1>ABYSSAL DRIFT</h1>
   <p>— 深海 2,800m —</p>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 'use strict';
+window.AbyssalToast = (() => {
+  const toast = document.getElementById('abyssalToast');
+  let timer = 0;
+  return {
+    show(message, duration = 2200) {
+      if (!toast) return;
+      window.clearTimeout(timer);
+      toast.textContent = message;
+      toast.classList.add('is-visible');
+      timer = window.setTimeout(() => toast.classList.remove('is-visible'), duration);
+    }
+  };
+})();
+</script>
+<script src="three.min.js"></script>
+<script src="font-presets.js"></script>
+<script src="chime.js"></script>
+<script>
+'use strict';
+
 /* =====================================================================
    ABYSSAL DRIFT — 深海アンビエント (Android TV 常時表示向け)
    - ポストプロセス不使用。発光はフレネル+加算合成スプライト/Pointsで表現し
@@ -217,6 +321,7 @@
    - 生物のアニメーションは可能な限り頂点シェーダー(GPU)側で実行
    ===================================================================== */
 
+if (window.THREE) {
 const FOG_COLOR = new THREE.Color(0x02101c);
 const FOG_DENSITY = 0.030;
 
@@ -1259,6 +1364,9 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+} else {
+  window.AbyssalToast.show('Three.js asset missing', 4000);
+}
 </script>
 </body>
 </html>
