@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-Download Three.js r128 into Android assets and rewrite index.html to local reference.
+"""Download Three.js r128 into Android assets and rewrite index.html to local reference."""
 from pathlib import Path
 import urllib.request
 

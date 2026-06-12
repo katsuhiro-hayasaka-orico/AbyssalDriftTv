@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- CDN上のthree.js / Google Fontsを読むため。完全オフライン化する場合はREADME参照。 -->
-    <uses-permission android:name="android.permission.INTERNET" />
-
     <!-- Android TV向け。タッチ必須にするとTVでインストール不可になるためfalse。 -->
     <uses-feature
         android:name="android.software.leanback"
