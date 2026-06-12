@@ -40,7 +40,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 `assets/index.html` は外部CDNや外部Webフォントを参照しない構成です。Three.js、チャイム音源、任意の数字フォントは `app/src/main/assets/` 配下のローカルアセットとして配置してください。
 
-- `three.min.js` が未配置の場合でも時計・カレンダー・Toastは停止しませんが、深海のThree.js/WebGL表現は表示されません。
+- `three.min.js` はローカル同梱済みです。上流Three.js r128へ差し替える場合も、同じパス `app/src/main/assets/three.min.js` に配置してください。
 - 数字フォントの `.woff2` が未配置の場合はシステムフォントへフォールバックします。
 - `audio/chime.mp3` が未配置または再生不可の場合はWeb Audio APIの簡易チャイムへフォールバックします。
 
@@ -94,7 +94,7 @@ window.playTestChime()
 
 アプリ本体は外部CDN、外部API、外部Webフォントに依存しない構成です。
 
-- Three.jsは `app/src/main/assets/three.min.js` としてローカル配置してください。
+- Three.js互換のローカル `app/src/main/assets/three.min.js` を同梱しています。必要に応じて上流Three.js r128の同名ファイルへ差し替えできます。
 - チャイム音源は `app/src/main/assets/audio/chime.mp3` としてローカル配置してください。
 - 数字フォントを移植する場合は `app/src/main/assets/fonts/*.woff2` に配置してください。未配置でもシステムフォントで表示されます。
 
@@ -104,7 +104,7 @@ window.playTestChime()
 python3 tools/localize_three.py
 ```
 
-このスクリプトはネットワーク接続が許可された環境でThree.js r128を取得し、`index.html` がローカルの `three.min.js` を参照するように更新します。
+このスクリプトはネットワーク接続が許可された環境で上流Three.js r128を取得し、同梱の `three.min.js` を差し替える用途で利用できます。
 
 ## 確認手順
 
